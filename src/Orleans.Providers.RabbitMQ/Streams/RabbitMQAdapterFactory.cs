@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans.Providers.Streams.Common;
+using Orleans.Runtime.Configuration;
 using Orleans.Streams;
 using System;
 using System.Threading.Tasks;
@@ -14,6 +15,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
         private RabbitMQStreamProviderOptions _config;
         private IRabbitMQMapper _mapper;
         private ILoggerFactory _loggeFactory;
+        private IMessageSerializationHandler _serializationHandler;
         private string _providerName;
         private IStreamQueueMapper _streamQueueMapper;
 
@@ -24,6 +26,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
             _config = serviceProvider.GetRequiredService<RabbitMQStreamProviderOptions>();
             _providerName = providerName;
             _loggeFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            _serializationHandler = serviceProvider.GetRequiredService<IMessageSerializationHandler>();
 
             _mapper = serviceProvider.GetRequiredService<IRabbitMQMapper>();
             _mapper.Init();
@@ -42,7 +45,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
 
         public Task<IQueueAdapter> CreateAdapter()
         {
-            IQueueAdapter adapter = new RabbitMQAdapter(_config, _loggeFactory, _providerName, _streamQueueMapper, _mapper);
+            IQueueAdapter adapter = new RabbitMQAdapter(_config, _loggeFactory, _providerName, _streamQueueMapper, _mapper, _serializationHandler);
             return Task.FromResult(adapter);
         }
 

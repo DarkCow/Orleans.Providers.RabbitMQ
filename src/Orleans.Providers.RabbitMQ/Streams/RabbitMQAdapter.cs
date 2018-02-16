@@ -1,11 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
+using Orleans.Runtime.Configuration;
 using Orleans.Streams;
 using RabbitMQ.Client;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Orleans.Providers.RabbitMQ.Streams
@@ -19,6 +18,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
         private IModel _model;
         private ConcurrentDictionary<QueueId, object> _queues;
         private IStreamQueueMapper _streamQueueMapper;
+        private IMessageSerializationHandler _serializationHandler;
 
         public StreamProviderDirection Direction { get; private set; }
 
@@ -26,7 +26,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
 
         public string Name { get; private set; }
 
-        public RabbitMQAdapter(RabbitMQStreamProviderOptions config, ILoggerFactory loggerFactory, string providerName, IStreamQueueMapper streamQueueMapper, IRabbitMQMapper mapper)
+        public RabbitMQAdapter(RabbitMQStreamProviderOptions config, ILoggerFactory loggerFactory, string providerName, IStreamQueueMapper streamQueueMapper, IRabbitMQMapper mapper, IMessageSerializationHandler serializationHandler)
         {
             Direction = config.Mode;
             _config = config;
@@ -35,6 +35,7 @@ namespace Orleans.Providers.RabbitMQ.Streams
             _streamQueueMapper = streamQueueMapper;
             _mapper = mapper;
             _queues = new ConcurrentDictionary<QueueId, object>();
+            _serializationHandler = serializationHandler;
             CreateConnection();
         }
 
@@ -59,8 +60,11 @@ namespace Orleans.Providers.RabbitMQ.Streams
 
             foreach (var e in events)
             {
-                var bytes = Encoding.ASCII.GetBytes(JsonConvert.SerializeObject(e));
-                _model.BasicPublish(_config.Exchange, _config.RoutingKey, null, bytes);
+                var props = _model.CreateBasicProperties();
+                props.MessageId = streamGuid.ToString();
+
+                var bytes = _serializationHandler.SerializeMessage(e);
+                _model.BasicPublish(_config.Exchange, _config.RoutingKey, props, bytes);
             }
         }
 

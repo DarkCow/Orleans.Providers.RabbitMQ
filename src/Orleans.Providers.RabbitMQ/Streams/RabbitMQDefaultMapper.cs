@@ -1,34 +1,30 @@
 ﻿using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
+using Orleans.Runtime.Configuration;
 using Orleans.Streams;
-using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Orleans.Providers.RabbitMQ.Streams
 {
     public class RabbitMQDefaultMapper : IRabbitMQMapper
     {
         private ILogger _logger;
+        private IMessageSerializationHandler _serializationHandler;
 
-        public RabbitMQDefaultMapper(ILoggerFactory loggerFactory)
+        public RabbitMQDefaultMapper(ILoggerFactory loggerFactory, IMessageSerializationHandler serializationHandler)
         {
             _logger = loggerFactory.CreateLogger(nameof(RabbitMQDefaultMapper));
+            _serializationHandler = serializationHandler;
         }
 
         public void Init() { }
 
-        public Tuple<Guid, string> MapToStream(byte[] message, string streamNamespace)
-        {
-            return new Tuple<Guid, string>(Guid.Empty, streamNamespace);
-        }
 
         public T MapToType<T>(byte[] message)
         {
             if (message is T)
                 return (T)(object)message;
-            T item = JsonConvert.DeserializeObject<T>(Encoding.ASCII.GetString(message));
-            return item;
+
+            return _serializationHandler.DeserializeMessage<T>(message);
         }
 
         public IEnumerable<string> GetPartitionKeys(QueueId queueId, int numQueues)
