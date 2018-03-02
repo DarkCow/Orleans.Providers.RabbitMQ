@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orleans;
+using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Providers.RabbitMQ.Streams;
 using Orleans.Providers.RabbitMQ.Test.Host.Bootstrap;
@@ -46,17 +48,31 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host
 
                 var configRoot = GetConfiguration();
                 var builder = new SiloHostBuilder()
-                    .WithClusterConfig(configRoot)
+                    .ConfigureRabbitMQStreamProviderWithOptions("Default", options =>
+                    {
+                        var opt = configRoot.GetSection(RabbitMQStreamProviderOptions.SECTION_NAME);//.Get<RabbitMQStreamProviderOptions>();
+                        options.Bind(opt);
+                    })
                     .WithParts()
-                    .WithMembership(configRoot)
+                    .UseLocalhostClustering()
                     .ConfigureLogging(logging =>
                     {
                         logging.AddConfiguration(configRoot.GetSection("Logging")).AddConsole();
-                        //logging.AddFile("./debug.txt");
+                    })
+                    .AddStartupTask<RabbitMQTestBootstrap>()
+                    .UseServiceProviderFactory(
+                    services =>
+                    {
+                        services
+                        .AddMemoryGrainStorageAsDefault()
+                        .AddMemoryGrainStorage("PubSubStore");
+
+                        return services.BuildServiceProvider();
                     });
 
                 _siloHost = builder.Build();
                 await _siloHost.StartAsync();
+
             }
             catch (Exception exc)
             {
@@ -66,30 +82,35 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host
             }
         }
 
-        private static ISiloHostBuilder WithMembership(this ISiloHostBuilder builder, IConfigurationRoot configRoot)
+
+        public static ISiloHostBuilder UseLocalhostClustering(
+          this ISiloHostBuilder builder,
+          int siloPort = EndpointOptions.DEFAULT_SILO_PORT,
+          int gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT,
+          IPEndPoint primarySiloEndpoint = null,
+          string clusterId = "dev") // ClusterOptions.DevelopmentClusterId)
         {
+            builder.Configure<EndpointOptions>(options =>
+            {
+                options.AdvertisedIPAddress = IPAddress.Loopback;
+                options.SiloPort = siloPort;
+                options.GatewayPort = gatewayPort;
+            });
+
+            builder.UseDevelopmentClustering((DevelopmentMembershipOptions options) =>
+            {
+                options.PrimarySiloEndpoint = primarySiloEndpoint ?? new IPEndPoint(IPAddress.Loopback, siloPort);
+            });
+
+            builder.Configure(options => options.ClusterId = clusterId);
+
             return builder;
-            //return builder.UseDevelopmentMembership(opt => opt.PrimarySiloEndpoint = new IPEndPoint(_siloIP, 10001));
         }
 
-        private static ISiloHostBuilder WithClusterConfig(this ISiloHostBuilder builder, IConfigurationRoot configRoot)
-        {
-            var config = ClusterConfiguration.LocalhostPrimarySilo();
-            config.Globals.ReminderServiceType = GlobalConfiguration.ReminderServiceProviderType.ReminderTableGrain;
-            config.Globals.ClusterId = configRoot["ClusterId"];
-            config.AddMemoryStorageProvider("PubSubStore");
-            config.Globals.RegisterBootstrapProvider<RabbitMQTestBootstrap>("Test");
-            config.AddRabbitMQStreamProvider("Default");
-            builder.UseConfiguration(config);
-            var opt = configRoot.GetSection(RabbitMQStreamProviderOptions.SECTION_NAME).Get<RabbitMQStreamProviderOptions>();
-            builder.ConfigureRabbitMQStreamProvider(opt);
-            return builder;
-        }
-        
         private static ISiloHostBuilder WithParts(this ISiloHostBuilder builder)
         {
             return builder
-                .ConfigureApplicationParts(mgr => mgr.AddApplicationPart(typeof(ImplicitGrain).Assembly));
+                .ConfigureApplicationParts(mgr => mgr.AddApplicationPart(typeof(ImplicitGrain).Assembly).WithReferences());
         }
 
         private static IConfigurationRoot GetConfiguration()

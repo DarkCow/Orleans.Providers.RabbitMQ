@@ -1,8 +1,10 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Orleans.Providers.RabbitMQ.Tests.Host.Interfaces;
-using Orleans.Streams;
 using Orleans.Runtime;
+using Orleans.Streams;
+using System;
+using System.Threading.Tasks;
 
 namespace Orleans.Providers.RabbitMQ.Tests.Host.Grains
 {
@@ -10,11 +12,12 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host.Grains
     {
         private int _counter;
         private IAsyncStream<string> _stream;
-
+        private ILogger _logger;
         public override Task OnActivateAsync()
         {
             var provider = GetStreamProvider("Default");
             _stream = provider.GetStream<string>(this.GetPrimaryKey(), "TestNamespace");
+            _logger = this.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(this.GetType().FullName);
             return Task.CompletedTask;
         }
 
@@ -38,14 +41,16 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host.Grains
         private async Task SendMessages(params string[] messages)
         {
             GetLogger().Info("Sending message{0} '{1}'...",
-                messages.Length > 1 ? "s" : "", string.Join(",", messages));
-            
+            messages.Length > 1 ? "s" : "", string.Join(",", messages));
+
             if (messages.Length == 1)
-            { 
+            {
                 await _stream.OnNextAsync(messages[0]);
                 return;
             }
             await _stream.OnNextBatchAsync(messages);
         }
+        private ILogger GetLogger() => _logger;
+
     }
 }
