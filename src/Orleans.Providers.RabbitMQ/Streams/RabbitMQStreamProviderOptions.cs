@@ -1,10 +1,12 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Orleans.Configuration;
+using Orleans.Runtime.Configuration;
 using Orleans.Streams;
 
 namespace Orleans.Providers.RabbitMQ.Streams
 {
-    public class RabbitMQStreamProviderOptions
+    public class RabbitMQStreamProviderOptions : PersistentStreamOptions
     {
         public const string SECTION_NAME = "Orleans.Providers.RabbitMQ";
         [JsonConverter(typeof(StringEnumConverter))]
@@ -23,5 +25,6 @@ namespace Orleans.Providers.RabbitMQ.Streams
         public string RoutingKey { get; set; }
         public string Username { get; set; }
         public string Password { get; set; }
+        public IMessageSerializationHandler MessageSerializationHandler { get; set; }
     }
 }

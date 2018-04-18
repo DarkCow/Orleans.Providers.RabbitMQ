@@ -1,42 +1,66 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Orleans.Configuration;
 using Orleans.Hosting;
 using Orleans.Providers.RabbitMQ.Streams;
+using System;
 
 namespace Orleans.Runtime.Configuration
 {
     public static class RabbitMQStreamProviderExtensions
     {
-        public static void AddRabbitMQStreamProvider(
-            this ClusterConfiguration config,
-            string providerName)
+        public static ISiloHostBuilder ConfigureRabbitMQStreamProvider(this ISiloHostBuilder builder, string name, Action<RabbitMQStreamProviderOptions> configureOptions)
         {
-            config.Globals.RegisterStreamProvider<RabbitMQStreamProvider>(providerName);
+            return builder.ConfigureRabbitMQStreamProviderWithOptions(name, ob => ob.Configure(configureOptions));
         }
 
-        public static void AddRabbitMQStreamProvider(
-            this ClientConfiguration config,
-            string providerName)
+        public static ISiloHostBuilder ConfigureRabbitMQStreamProviderWithOptions(this ISiloHostBuilder builder, string name, Action<OptionsBuilder<RabbitMQStreamProviderOptions>> configureOptions)
         {
-            config.RegisterStreamProvider<RabbitMQStreamProvider>(providerName);
+            return builder.ConfigureServices(services => services.AddRabbitMQStreamProvider(name, configureOptions));
         }
 
-        public static ISiloHostBuilder ConfigureRabbitMQStreamProvider(this ISiloHostBuilder builder, RabbitMQStreamProviderOptions options)
+        public static IClientBuilder ConfigureRabbitMQStreamProvider(this IClientBuilder builder, string name, Action<RabbitMQStreamProviderOptions> configureOptions)
         {
-            return builder.ConfigureServices(services =>
+            return builder.ConfigureRabbitMQStreamProviderWithOptions(name, ob => ob.Configure(configureOptions));
+        }
+
+        public static IClientBuilder ConfigureRabbitMQStreamProviderWithOptions(this IClientBuilder builder, string name, Action<OptionsBuilder<RabbitMQStreamProviderOptions>> configureOptions)
+        {
+            return builder.ConfigureServices(services => services.AddRabbitMQStreamProvider(name, configureOptions));
+        }
+
+        public static IServiceCollection AddRabbitMQStreamProvider(this IServiceCollection services, string name, Action<OptionsBuilder<RabbitMQStreamProviderOptions>> configureOptions = null)
+        {
+            var optionsBuilder = services.AddOptions<RabbitMQStreamProviderOptions>();
+            configureOptions?.Invoke(optionsBuilder);
+
+            services.AddSingleton<RabbitMQStreamProviderOptions>(provider =>
             {
-                services.AddSingleton<IRabbitMQMapper>(provider => new RabbitMQDefaultMapper(provider.GetRequiredService<ILoggerFactory>()));
-                services.AddSingleton(options);
-            });
+                var options = provider.GetService<IOptionsSnapshot<RabbitMQStreamProviderOptions>>().Value;
+                options.MessageSerializationHandler = options.MessageSerializationHandler ?? new DefaultSerializationHandler();
+                return options;
+            })
+            .AddSingleton<IRabbitMQMapper>(provider =>
+             {
+                 var options = provider.GetService<IOptionsSnapshot<RabbitMQStreamProviderOptions>>().Value;
+                 return new RabbitMQDefaultMapper(provider.GetRequiredService<ILoggerFactory>(), options.MessageSerializationHandler);
+
+             })
+            .AddSiloQueueStreams<RabbitMQDefaultMapper>(name);
+
+            return services;
+        }
+        public static IServiceCollection AddSiloQueueStreams<TDataAdapter>(this IServiceCollection services, string name)
+         where TDataAdapter : IRabbitMQMapper
+        {
+            return services
+                  .AddSiloPersistentStreams<RabbitMQStreamProviderOptions>(name, (serv, s) =>
+                  {
+                      return new RabbitMQAdapterFactory<TDataAdapter>(name, serv);
+                  });
         }
 
-        public static IClientBuilder ConfigureRabbitMQStreamProvider(this IClientBuilder builder, RabbitMQStreamProviderOptions options)
-        {
-            return builder.ConfigureServices(services =>
-            {
-                services.AddSingleton<IRabbitMQMapper>(provider => new RabbitMQDefaultMapper(provider.GetRequiredService<ILoggerFactory>()));
-                services.AddSingleton(options);
-            });
-        }
     }
+
 }

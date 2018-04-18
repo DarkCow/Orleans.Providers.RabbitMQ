@@ -71,11 +71,11 @@ namespace Orleans.Providers.RabbitMQ.Streams
 
         private RabbitMQBatchContainer CreateContainer(BasicGetResult result)
         {
-            var streamMap = _mapper.MapToStream(result.Body, _config.Namespace);
+            var streamId = Guid.Parse(result.BasicProperties.MessageId);
             var container = new RabbitMQBatchContainer(result.DeliveryTag, result.Body, _mapper)
             {
-                StreamGuid = streamMap.Item1,
-                StreamNamespace = streamMap.Item2,
+                StreamGuid = streamId,
+                StreamNamespace = _config.Namespace,
                 SequenceToken = new EventSequenceToken((long)result.DeliveryTag)
             };
 
