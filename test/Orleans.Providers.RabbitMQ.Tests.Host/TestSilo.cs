@@ -48,27 +48,27 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host
 
                 var configRoot = GetConfiguration();
                 var builder = new SiloHostBuilder()
-                    .ConfigureRabbitMQStreamProviderWithOptions("Default", options =>
+                    .AddRabbitMQStreams("Default", config =>
                     {
-                        var opt = configRoot.GetSection(RabbitMQStreamProviderOptions.SECTION_NAME);//.Get<RabbitMQStreamProviderOptions>();
-                        options.Bind(opt);
-                    })
+                        config.Exchange = "exchange";
+                        config.HostName = "localhost";
+                        config.Namespace = "TestNamespace";
+                        config.Password = "guest";
+                        config.Port = 5671;
+                        config.Queue = "queue";
+                        config.RoutingKey = "#";
+                        config.Username = "guest";
+                        config.VirtualHost = "/";
+                    } )
                     .WithParts()
                     .UseLocalhostClustering()
                     .ConfigureLogging(logging =>
                     {
                         logging.AddConfiguration(configRoot.GetSection("Logging")).AddConsole();
                     })
-                    .AddStartupTask<RabbitMQTestBootstrap>()
-                    .UseServiceProviderFactory(
-                    services =>
-                    {
-                        services
-                        .AddMemoryGrainStorageAsDefault()
-                        .AddMemoryGrainStorage("PubSubStore");
-
-                        return services.BuildServiceProvider();
-                    });
+                    .AddMemoryGrainStorageAsDefault()
+                    .AddMemoryGrainStorage("PubSubStore")
+                    .AddStartupTask<RabbitMQTestBootstrap>();
 
                 _siloHost = builder.Build();
                 await _siloHost.StartAsync();
@@ -82,30 +82,6 @@ namespace Orleans.Providers.RabbitMQ.Tests.Host
             }
         }
 
-
-        public static ISiloHostBuilder UseLocalhostClustering(
-          this ISiloHostBuilder builder,
-          int siloPort = EndpointOptions.DEFAULT_SILO_PORT,
-          int gatewayPort = EndpointOptions.DEFAULT_GATEWAY_PORT,
-          IPEndPoint primarySiloEndpoint = null,
-          string clusterId = "dev") // ClusterOptions.DevelopmentClusterId)
-        {
-            builder.Configure<EndpointOptions>(options =>
-            {
-                options.AdvertisedIPAddress = IPAddress.Loopback;
-                options.SiloPort = siloPort;
-                options.GatewayPort = gatewayPort;
-            });
-
-            builder.UseDevelopmentClustering((DevelopmentMembershipOptions options) =>
-            {
-                options.PrimarySiloEndpoint = primarySiloEndpoint ?? new IPEndPoint(IPAddress.Loopback, siloPort);
-            });
-
-            builder.Configure(options => options.ClusterId = clusterId);
-
-            return builder;
-        }
 
         private static ISiloHostBuilder WithParts(this ISiloHostBuilder builder)
         {
